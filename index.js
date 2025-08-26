@@ -122,6 +122,51 @@ app.get('/consultar-protocolo/:protocolo', async (req, res) => {
         console.error("Erro ao consultar protocolo:", err.message);
         return res.status(500).json({ erro: "Erro interno do servidor." });
     }
+   
+
+});
+
+
+// NOVA ROTA GET PARA BUSCAR O ÚLTIMO PROTOCOLO ATIVO POR TELEFONE
+app.get('/consultar-por-telefone', async (req, res) => {
+    // 1. Pega o número do telefone que vem na URL como query parameter
+    const { telefone } = req.query;
+
+    console.log('Recebida consulta para o telefone:', telefone);
+
+    // Validação simples
+    if (!telefone) {
+        return res.status(400).json({ erro: "O parâmetro 'telefone' é obrigatório." });
+    }
+
+    try {
+        // 2. A nossa consulta SQL inteligente
+        const prazoEmHoras = 48; // Defina o prazo aqui para fácil manutenção
+        const sql = `
+            SELECT * FROM protocolos_detalhados
+            WHERE numero_telefone = $1
+            AND data_criacao >= now() - INTERVAL '${prazoEmHoras} hours'
+            ORDER BY data_criacao DESC
+            LIMIT 1;
+        `;
+
+        // 3. Executa a consulta
+        const { rows } = await pool.query(sql, [telefone]);
+
+        // 4. Verifica se a consulta retornou algum resultado
+        if (rows.length > 0) {
+            // Se encontrou, retorna o protocolo encontrado
+            const protocoloEncontrado = rows[0];
+            return res.status(200).json(protocoloEncontrado);
+        } else {
+            // Se a consulta não retornou nada, significa que não há protocolos ativos
+            return res.status(404).json({ mensagem: "Nenhum protocolo ativo encontrado para este telefone." });
+        }
+
+    } catch (err) {
+        console.error("Erro ao consultar por telefone:", err.message);
+        return res.status(500).json({ erro: "Erro interno do servidor." });
+    }
 });
 
 
