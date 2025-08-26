@@ -1,6 +1,8 @@
 require('dotenv').config(); // Carrega variáveis de ambiente do arquivo .env
 const express = require('express');
 const { Pool } = require('pg'); // Importa o Pool do pacote pg
+const { differenceInHours } = require('date-fns');
+const { formatInTimeZone } = require('date-fns-tz');
 
 const app = express();
 app.use(express.json());
@@ -67,6 +69,57 @@ app.post('/registrar-chamada', async (req, res) => {
 
     } catch (err) {
         console.error("Erro ao registrar chamada:", err.message);
+        return res.status(500).json({ erro: "Erro interno do servidor." });
+    }
+});
+// NOVA ROTA GET PARA CONSULTAR UM PROTOCOLO DETALHADO
+app.get('/consultar-protocolo/:protocolo', async (req, res) => {
+    // 1. Pega o número do protocolo que vem na URL
+    const { protocolo } = req.params;
+
+    console.log('Recebida consulta para o protocolo:', protocolo);
+
+    try {
+        // 2. Comando SQL para buscar os dados na nova tabela
+        const sql = 'SELECT * FROM protocolos_detalhados WHERE protocolo = $1';
+
+        // 3. Executa a consulta
+        const { rows } = await pool.query(sql, [protocolo]);
+
+        // 4. Verifica se encontrou o protocolo
+        if (rows.length > 0) {
+            const protocoloDoBanco = rows[0];
+
+            // --- Lógica para calcular se está no prazo ---
+            // Vamos definir um prazo de 48 horas como exemplo
+            const prazoEmHoras = 48;
+            const agora = new Date(); // Pega a data e hora atuais
+            const dataCriacao = new Date(protocoloDoBanco.data_criacao); // Converte a data do banco
+            const horasDesdeCriacao = differenceInHours(agora, dataCriacao);
+            const esta_no_prazo = horasDesdeCriacao <= prazoEmHoras;
+
+            // 5. Prepara a resposta final para o usuário
+            const resposta = {
+                protocolo: protocoloDoBanco.protocolo,
+                // Formata a data para o padrão Brasil e mostra o fuso horário
+                data_criacao: formatInTimeZone(dataCriacao, 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm:ss zzz'),
+                esta_no_prazo: esta_no_prazo, // O resultado do nosso cálculo
+                numero_telefone: protocoloDoBanco.numero_telefone,
+                campo_custom_1: protocoloDoBanco.campo_custom_1,
+                campo_custom_2: protocoloDoBanco.campo_custom_2,
+                campo_custom_3: protocoloDoBanco.campo_custom_3,
+                campo_custom_4: protocoloDoBanco.campo_custom_4,
+            };
+
+            return res.status(200).json(resposta);
+
+        } else {
+            // Se não encontrou, retorna um erro 404
+            return res.status(404).json({ erro: "Protocolo não encontrado." });
+        }
+
+    } catch (err) {
+        console.error("Erro ao consultar protocolo:", err.message);
         return res.status(500).json({ erro: "Erro interno do servidor." });
     }
 });
